@@ -3,7 +3,7 @@ import CardRow from "@/components/CardRow";
 import { getAppUrl } from "@/lib/app-url";
 
 async function getCards() {
-  const res = await fetch(`${getAppUrl()}/api/...`, {
+  const res = await fetch(`${getAppUrl()}/api/cards`, {
     cache: "no-store",
   });
 

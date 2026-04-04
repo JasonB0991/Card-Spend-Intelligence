@@ -1,6 +1,6 @@
 import { getAppUrl } from "@/lib/app-url";
 async function getEmails() {
-  const res = await fetch(`${getAppUrl()}/api/...`, {
+  const res = await fetch(`${getAppUrl()}/api/emails`, {
     cache: "no-store",
   });
 

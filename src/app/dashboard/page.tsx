@@ -15,7 +15,7 @@ async function getTransactions() {
 }
 
 async function getCards() {
-  const res = await fetch("http://localhost:3000/api/cards", {
+  const res = await fetch(`${getAppUrl()}/api/cards`, {
     cache: "no-store",
   });
 
@@ -28,7 +28,7 @@ async function getCards() {
 }
 
 async function getSplits() {
-  const res = await fetch("http://localhost:3000/api/splits", {
+  const res = await fetch(`${getAppUrl()}/api/splits`, {
     cache: "no-store",
   });
 
