@@ -1,8 +1,9 @@
 import AddCardForm from "@/components/AddCardForm";
 import CardRow from "@/components/CardRow";
+import { getAppUrl } from "@/lib/app-url";
 
 async function getCards() {
-  const res = await fetch("http://localhost:3000/api/cards", {
+  const res = await fetch(`${getAppUrl()}/api/...`, {
     cache: "no-store",
   });
 

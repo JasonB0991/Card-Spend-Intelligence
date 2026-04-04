@@ -1,7 +1,8 @@
 import ReviewTransactionCard from "@/components/ReviewTransactionCard";
+import { getAppUrl } from "@/lib/app-url";
 
 async function getReviewTransactions() {
-  const res = await fetch("http://localhost:3000/api/review", {
+  const res = await fetch(`${getAppUrl()}/api/...`, {
     cache: "no-store",
   });
 

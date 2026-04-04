@@ -1,7 +1,8 @@
 import DashboardClient from "@/components/DashboardClient";
+import { getAppUrl } from "@/lib/app-url";
 
 async function getTransactions() {
-  const res = await fetch("http://localhost:3000/api/transactions", {
+  const res = await fetch(`${getAppUrl()}/api/transactions`, {
     cache: "no-store",
   });
 
