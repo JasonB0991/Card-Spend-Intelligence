@@ -91,13 +91,15 @@ export default function DashboardClient({
       if (
         selectedPlatform !== "all" &&
         (txn.platform_code || "unknown") !== selectedPlatform
-      )
+      ) {
         return false;
+      }
       if (
         selectedReview !== "all" &&
         (txn.review_status || "needs_review") !== selectedReview
-      )
+      ) {
         return false;
+      }
 
       return true;
     });
@@ -124,16 +126,23 @@ export default function DashboardClient({
     const map = new Map<string, number>();
 
     for (const txn of filteredTransactions) {
+      const matchedCard = cards.find((c) => c.id === txn.card_id);
+
       const cardName =
-        cards.find((c) => c.id === txn.card_id)?.nickname ||
-        txn.card_label ||
-        txn.card_last4 ||
-        "Unknown";
+        matchedCard?.nickname ||
+        (matchedCard
+          ? `${matchedCard.supported_card_types?.bank_name || "Card"} ${
+              matchedCard.supported_card_types?.card_name || ""
+            } • ${matchedCard.card_last4}`
+          : txn.card_label || txn.card_last4 || "Unknown");
 
       map.set(cardName, (map.get(cardName) || 0) + Number(txn.amount || 0));
     }
 
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+    return Array.from(map.entries()).map(([name, value]) => ({
+      name,
+      value,
+    }));
   }, [filteredTransactions, cards]);
 
   const byPlatformData = useMemo(() => {
@@ -144,7 +153,10 @@ export default function DashboardClient({
       map.set(platform, (map.get(platform) || 0) + Number(txn.amount || 0));
     }
 
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+    return Array.from(map.entries()).map(([name, value]) => ({
+      name,
+      value,
+    }));
   }, [filteredTransactions]);
 
   const byDateData = useMemo(() => {
@@ -170,37 +182,34 @@ export default function DashboardClient({
   return (
     <>
       <div className="flex flex-col gap-4 mb-6">
-  <div className="flex items-start justify-between gap-4 flex-wrap">
-    <div>
-      <h1 className="text-3xl font-bold">Spend Dashboard</h1>
-      <p className="text-sm text-gray-600 mt-1">
-        View spend by card, platform, and date.
-      </p>
-    </div>
-  </div>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-bold">Spend Dashboard</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              View spend by card, platform, and date.
+            </p>
+          </div>
+        </div>
 
-  <div className="flex flex-wrap gap-2">
-    <Link href="/dashboard" className="border rounded-lg px-4 py-2">
-      Dashboard
-    </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/dashboard" className="border rounded-lg px-4 py-2">
+            Dashboard
+          </Link>
 
-    <Link href="/review" className="border rounded-lg px-4 py-2">
-      Review Queue
-    </Link>
+          <Link href="/transactions" className="border rounded-lg px-4 py-2">
+            View All Transactions
+          </Link>
 
-    <Link href="/cards" className="border rounded-lg px-4 py-2">
-      Cards
-    </Link>
+          <Link href="/review" className="border rounded-lg px-4 py-2">
+            Review Queue
+          </Link>
 
-    <Link href="/add" className="border rounded-lg px-4 py-2">
-      Add Transaction
-    </Link>
-
-    <Link href="/emails" className="border rounded-lg px-4 py-2">
-      Raw Emails
-    </Link>
-  </div>
-</div>
+          <Link href="/cards" className="border rounded-lg px-4 py-2">
+            Cards
+          </Link>
+          
+        </div>
+      </div>
 
       <div className="border rounded-2xl p-4 shadow-sm mb-6">
         <h2 className="text-lg font-semibold mb-4">Filters</h2>
@@ -273,7 +282,9 @@ export default function DashboardClient({
 
         <div className="border rounded-2xl p-4 shadow-sm">
           <p className="text-sm text-gray-500">Transactions</p>
-          <p className="text-2xl font-semibold">{filteredTransactions.length}</p>
+          <p className="text-2xl font-semibold">
+            {filteredTransactions.length}
+          </p>
         </div>
 
         <div className="border rounded-2xl p-4 shadow-sm">
@@ -285,6 +296,20 @@ export default function DashboardClient({
           <p className="text-sm text-gray-500">Pending To Collect</p>
           <p className="text-2xl font-semibold">
             {formatCurrency(pendingToCollect)}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <div className="border rounded-2xl p-4 shadow-sm">
+          <p className="text-sm text-gray-500">Matched Products</p>
+          <p className="text-2xl font-semibold">{matchedProductsCount}</p>
+        </div>
+
+        <div className="border rounded-2xl p-4 shadow-sm">
+          <p className="text-sm text-gray-500">Active Cards</p>
+          <p className="text-2xl font-semibold">
+            {cards.filter((card) => card.is_active).length}
           </p>
         </div>
       </div>
@@ -335,58 +360,6 @@ export default function DashboardClient({
             <Line type="monotone" dataKey="value" strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
-      </div>
-
-      <div className="border rounded-2xl p-4 shadow-sm">
-        <h2 className="text-lg font-semibold mb-4">Transactions</h2>
-
-        <div className="space-y-3">
-          {filteredTransactions.length === 0 ? (
-            <p>No transactions for current filters.</p>
-          ) : (
-            filteredTransactions.map((txn) => (
-              <div
-                key={txn.id}
-                className="border rounded-xl p-4 flex flex-col gap-2"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-semibold text-base">
-                      {txn.product_name ||
-                        txn.merchant_normalized ||
-                        txn.merchant_raw ||
-                        "Unknown"}
-                    </p>
-
-                    <div className="text-sm text-gray-600 space-y-1 mt-1">
-                      {txn.platform_code && <p>Platform: {txn.platform_code}</p>}
-                      {txn.card_label && (
-                        <p>
-                          Card: {txn.card_label}
-                          {txn.card_last4 ? ` • ending ${txn.card_last4}` : ""}
-                        </p>
-                      )}
-                      {txn.txn_date && (
-                        <p>{new Date(txn.txn_date).toLocaleString()}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <p className="font-semibold">{formatCurrency(txn.amount)}</p>
-                    <p className="text-sm text-gray-500">
-                      {txn.review_status || "needs_review"}
-                    </p>
-                  </div>
-                </div>
-
-                {txn.note && (
-                  <p className="text-sm text-gray-600">Note: {txn.note}</p>
-                )}
-              </div>
-            ))
-          )}
-        </div>
       </div>
     </>
   );

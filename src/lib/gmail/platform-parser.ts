@@ -18,7 +18,7 @@ type EmailRow = {
 };
 
 /* =========================
-   TEXT CLEANING (IMPORTANT)
+   TEXT CLEANING
 ========================= */
 
 function decodeHtmlEntities(text: string) {
@@ -91,8 +91,18 @@ function toIsoFromSwiggy(dateText: string): string | null {
 
   const [, mon, day, hh, mm, ampm] = match;
   const monthMap: Record<string, string> = {
-    Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
-    Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
+    Jan: "01",
+    Feb: "02",
+    Mar: "03",
+    Apr: "04",
+    May: "05",
+    Jun: "06",
+    Jul: "07",
+    Aug: "08",
+    Sep: "09",
+    Oct: "10",
+    Nov: "11",
+    Dec: "12",
   };
 
   const month = monthMap[mon];
@@ -109,6 +119,69 @@ function toIsoFromSwiggy(dateText: string): string | null {
 /* =========================
    PARSERS
 ========================= */
+
+function parseSwiggyInstamart(email: EmailRow): PlatformOrder | null {
+  const from = (email.from_email || "").toLowerCase();
+  const text = getEmailText(email);
+
+  if (!from.includes("no-reply@swiggy.in")) return null;
+  if (!/instamart/i.test(text)) return null;
+  if (!/order id:\s*\d+/i.test(text)) return null;
+  if (!/grand total/i.test(text)) return null;
+  if (!/order items/i.test(text)) return null;
+
+  const orderIdMatch =
+    text.match(/Instamart order id:\s*(\d+)/i) ||
+    text.match(/order id:\s*(\d+)/i);
+
+  const totalMatch = text.match(
+    /Grand Total\s*₹\s*([\d,]+(?:\.\d{1,2})?)/i
+  );
+
+  const dateMatch = text.match(
+    /([A-Za-z]{3}\s+\d{1,2},\s+\d{1,2}:\d{2}\s+[AP]M)/i
+  );
+
+  const itemsBlockMatch = text.match(
+    /Order Items\s+(.+?)\s+Order Summary/i
+  );
+
+  let orderTitle: string | null = null;
+
+  if (itemsBlockMatch?.[1]) {
+    const itemsBlock = itemsBlockMatch[1];
+
+    const itemLines = Array.from(
+      itemsBlock.matchAll(
+        /(\d+\s*x\s+.+?)\s+₹\s*[\d,]+(?:\.\d{1,2})?/gi
+      )
+    ).map((m) => m[1].trim());
+
+    if (itemLines.length > 0) {
+      orderTitle = itemLines.join(", ");
+    } else {
+      orderTitle = itemsBlock.trim();
+    }
+  }
+
+  console.log("SWIGGY INSTAMART DEBUG", {
+    preview: text.slice(0, 800),
+    orderId: orderIdMatch?.[1],
+    total: totalMatch?.[1],
+    orderTitle,
+  });
+
+  return {
+    supported_platform_type_code: "swiggy_instamart",
+    order_amount: parseMoney(totalMatch?.[1]),
+    currency: "INR",
+    order_title: orderTitle,
+    merchant_name: "Swiggy Instamart",
+    order_reference: orderIdMatch?.[1] || null,
+    order_date: dateMatch?.[1] ? toIsoFromSwiggy(dateMatch[1]) : null,
+    raw_platform: "Swiggy Instamart",
+  };
+}
 
 function parseSwiggy(email: EmailRow): PlatformOrder | null {
   const from = (email.from_email || "").toLowerCase();
@@ -133,8 +206,6 @@ function parseSwiggy(email: EmailRow): PlatformOrder | null {
   };
 }
 
-/* ===== ZOMATO FIXED ===== */
-
 function parseZomato(email: EmailRow): PlatformOrder | null {
   const from = (email.from_email || "").toLowerCase();
   const subject = (email.subject || "").toLowerCase();
@@ -151,9 +222,9 @@ function parseZomato(email: EmailRow): PlatformOrder | null {
     text.match(/Your Zomato order from\s+(.+?)\s+Chicken/i);
 
   const itemMatch =
-    text.match(/\b\d+\s*X\s+(.+?)\s+Total paid/i) ||   // BEST MATCH
-    text.match(/Items\s+(.+?)\s+Is this correct/i) || // fallback
-    text.match(/Chicken\s+\d+/i);                     // emergency fallback
+    text.match(/\b\d+\s*X\s+(.+?)\s+Total paid/i) ||
+    text.match(/Items\s+(.+?)\s+Is this correct/i) ||
+    text.match(/Chicken\s+\d+/i);
 
   console.log("ZOMATO CLEAN DEBUG", {
     text: text.slice(0, 400),
@@ -165,8 +236,7 @@ function parseZomato(email: EmailRow): PlatformOrder | null {
     supported_platform_type_code: "zomato",
     order_amount: parseMoney(totalMatch?.[1]),
     currency: "INR",
-    order_title:
-      (itemMatch?.[1] || itemMatch?.[0] || null)?.trim() || null,
+    order_title: (itemMatch?.[1] || itemMatch?.[0] || null)?.trim() || null,
     merchant_name: restaurantMatch?.[1]?.trim() || null,
     order_reference: orderIdMatch?.[1] || null,
     order_date: null,
@@ -205,9 +275,7 @@ function parseFlipkart(email: EmailRow): PlatformOrder | null {
   const orderIdMatch = text.match(/Order ID\s+(OD[0-9]+)/i);
   const totalMatch = text.match(/total\s+₨\.?\s*([\d.]+)/i);
 
-  const titleMatch = text.match(
-    /Govee HDMI.*?(?=Seller)/i
-  );
+  const titleMatch = text.match(/Govee HDMI.*?(?=Seller)/i);
 
   return {
     supported_platform_type_code: "flipkart",
@@ -221,10 +289,9 @@ function parseFlipkart(email: EmailRow): PlatformOrder | null {
   };
 }
 
-/* ========================= */
-
 export function parsePlatformOrderEmail(email: EmailRow): PlatformOrder | null {
   return (
+    parseSwiggyInstamart(email) ||
     parseSwiggy(email) ||
     parseZomato(email) ||
     parseAmazon(email) ||
