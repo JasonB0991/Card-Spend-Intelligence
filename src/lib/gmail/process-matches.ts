@@ -18,9 +18,36 @@ function getPlatformCodeFromTransaction(txn: any): string | null {
   return null;
 }
 
+function isCompatiblePlatform(txnPlatformCode: string, orderPlatformCode: string) {
+  if (txnPlatformCode === orderPlatformCode) return true;
+
+  // Swiggy bank merchant can refer to food or instamart
+  if (
+    txnPlatformCode === "swiggy" &&
+    (orderPlatformCode === "swiggy" || orderPlatformCode === "swiggy_instamart")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function amountsClose(a: number | null, b: number | null) {
   if (a == null || b == null) return false;
   return Math.abs(Number(a) - Number(b)) <= 1;
+}
+
+function timeDistanceInHours(txnDate: string | null, orderDate: string | null) {
+  if (!txnDate || !orderDate) return Number.POSITIVE_INFINITY;
+
+  const txnTs = new Date(txnDate).getTime();
+  const orderTs = new Date(orderDate).getTime();
+
+  if (Number.isNaN(txnTs) || Number.isNaN(orderTs)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Math.abs(txnTs - orderTs) / (1000 * 60 * 60);
 }
 
 function buildProductName(order: any): string | null {
@@ -61,25 +88,55 @@ export async function processTransactionMatches() {
   let skippedCount = 0;
 
   for (const txn of transactions || []) {
-    const platformCode = getPlatformCodeFromTransaction(txn);
+    const txnPlatformCode = getPlatformCodeFromTransaction(txn);
 
-    if (!platformCode) {
+    if (!txnPlatformCode) {
       skippedCount++;
       continue;
     }
 
     const candidates = (platformOrders || []).filter((order: any) => {
-      const code = order.supported_platform_types?.code;
-      return code === platformCode && amountsClose(Number(txn.amount), Number(order.order_amount));
+      const orderPlatformCode = order.supported_platform_types?.code;
+
+      if (!orderPlatformCode) return false;
+      if (!isCompatiblePlatform(txnPlatformCode, orderPlatformCode)) return false;
+      if (!amountsClose(Number(txn.amount), Number(order.order_amount))) return false;
+
+      return true;
     });
 
     if (candidates.length === 0) {
+      console.log("MATCH DEBUG - no candidates", {
+        txnId: txn.id,
+        txnAmount: txn.amount,
+        txnMerchant: txn.merchant_normalized || txn.merchant_raw,
+        txnPlatformCode,
+      });
+
       skippedCount++;
       continue;
     }
 
-    const best = candidates[0];
+    const rankedCandidates = [...candidates].sort((a: any, b: any) => {
+      const aDistance = timeDistanceInHours(txn.txn_date, a.order_date);
+      const bDistance = timeDistanceInHours(txn.txn_date, b.order_date);
+
+      return aDistance - bDistance;
+    });
+
+    const best = rankedCandidates[0];
     const productName = buildProductName(best);
+
+    console.log("MATCH DEBUG - chosen candidate", {
+      txnId: txn.id,
+      txnAmount: txn.amount,
+      txnMerchant: txn.merchant_normalized || txn.merchant_raw,
+      txnPlatformCode,
+      matchedOrderId: best.id,
+      matchedOrderPlatform: best.supported_platform_types?.code,
+      matchedOrderAmount: best.order_amount,
+      matchedOrderTitle: best.order_title,
+    });
 
     const { data: existingMatch } = await supabaseAdmin
       .from("transaction_order_matches")
@@ -108,13 +165,22 @@ export async function processTransactionMatches() {
         .eq("id", existingMatch.id);
     }
 
+    const updates: Record<string, unknown> = {
+      product_name: productName,
+      platform_code: txnPlatformCode,
+    };
+
+    if (
+      txn.review_status === null ||
+      txn.review_status === undefined ||
+      txn.review_status === ""
+    ) {
+      updates.review_status = "needs_review";
+    }
+
     const { error: updateTxnError } = await supabaseAdmin
       .from("transactions")
-      .update({
-        product_name: productName,
-        platform_code: platformCode,
-        review_status: "needs_review",
-      })
+      .update(updates)
       .eq("id", txn.id);
 
     if (updateTxnError) {
