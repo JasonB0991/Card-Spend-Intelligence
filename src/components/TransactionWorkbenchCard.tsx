@@ -33,6 +33,21 @@ type Transaction = {
   review_status: string | null;
   review_note: string | null;
 };
+function formatPlatformName(code: string | null | undefined) {
+  if (!code) return null;
+
+  const map: Record<string, string> = {
+    swiggy: "Swiggy",
+    swiggy_instamart: "Swiggy Instamart",
+    zomato: "Zomato",
+    amazon: "Amazon",
+    flipkart: "Flipkart",
+    uber: "Uber",
+    zepto: "Zepto",
+  };
+
+  return map[code] || code.replaceAll("_", " ");
+}
 
 export default function TransactionWorkbenchCard({
   txn,
@@ -180,11 +195,16 @@ export default function TransactionWorkbenchCard({
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="font-semibold text-lg">
-            {txn.product_name ||
-              txn.merchant_normalized ||
-              txn.merchant_raw ||
-              "Unknown Merchant"}
-          </p>
+            {txn.platform_code
+                ? txn.platform_code.replaceAll("_", " ").toUpperCase()
+                : txn.merchant_normalized || txn.merchant_raw || "Unknown"}
+            </p>
+
+            {txn.product_name && (
+            <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                {txn.product_name}
+            </p>
+            )}
           <p>₹{txn.amount}</p>
           <div className="text-sm text-gray-500 space-y-1 mt-1">
             {txn.platform_code && <p>Platform: {txn.platform_code}</p>}
