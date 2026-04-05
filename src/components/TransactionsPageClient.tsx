@@ -43,7 +43,7 @@ type Split = {
   person_name: string;
   amount_owed: number;
   status: string;
-  comment?: string | null;
+  comment: string | null;
 };
 
 function formatCardName(card: Card) {
