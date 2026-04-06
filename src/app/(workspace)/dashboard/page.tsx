@@ -1,4 +1,4 @@
-import TransactionsPageClient from "@/components/TransactionsPageClient";
+import DashboardClient from "@/components/DashboardClient";
 import { getAppUrl } from "@/lib/app-url";
 
 async function getTransactions() {
@@ -40,7 +40,7 @@ async function getSplits() {
   return res.json();
 }
 
-export default async function TransactionsPage() {
+export default async function DashboardPage() {
   const [transactions, cards, splits] = await Promise.all([
     getTransactions(),
     getCards(),
@@ -48,12 +48,10 @@ export default async function TransactionsPage() {
   ]);
 
   return (
-    <main className="p-6 max-w-7xl mx-auto">
-      <TransactionsPageClient
-        transactions={transactions}
-        cards={cards}
-        splits={splits}
-      />
-    </main>
+    <DashboardClient
+      transactions={transactions}
+      cards={cards}
+      splits={splits}
+    />
   );
 }
