@@ -59,12 +59,9 @@ function formatCurrency(value: number) {
 }
 
 function formatCardName(card: Card) {
-  return (
-    card.nickname ||
-    `${card.supported_card_types?.bank_name || "Card"} ${
-      card.supported_card_types?.card_name || ""
-    } • ${card.card_last4}`
-  );
+  return `${card.supported_card_types?.bank_name || "Card"} ${
+    card.supported_card_types?.card_name || ""
+  }`.trim();
 }
 
 const donutPalette = [
@@ -76,6 +73,32 @@ const stackedBarColors = [
   "#166534", "#15803d", "#16a34a", "#22c55e",
   "#4ade80", "#86efac", "#bbf7d0", "#dcfce7",
 ];
+function getPlatformColor(name: string, fallback: string) {
+  const normalized = name.toLowerCase();
+
+  if (normalized.includes("zomato")) {
+    return "#ef4444"; // red
+  }
+
+  if (normalized.includes("swiggy")) {
+    return "#f97316"; // orange
+  }
+
+  return fallback;
+}
+function getCardColor(name: string, fallback: string) {
+  const normalized = name.toLowerCase();
+
+  if (normalized.includes("sbi") && normalized.includes("cashback")) {
+    return "#a78bfa"; // lavender
+  }
+
+  if (normalized.includes("hdfc") && normalized.includes("swiggy")) {
+    return "#f97316"; // orange
+  }
+
+  return fallback;
+}
 
 function IconChevron({ open }: { open: boolean }) {
   return (
@@ -207,13 +230,9 @@ export default function DashboardClient({
 
     for (const txn of filteredTransactions) {
       const matchedCard = cards.find((c) => c.id === txn.card_id);
-      const cardName =
-        matchedCard?.nickname ||
-        (matchedCard
-          ? `${matchedCard.supported_card_types?.bank_name || "Card"} ${
-              matchedCard.supported_card_types?.card_name || ""
-            } • ${matchedCard.card_last4}`
-          : txn.card_label || txn.card_last4 || "Unknown");
+      const cardName = matchedCard
+  ? formatCardName(matchedCard)
+  : txn.card_label || "Unknown";
 
       map.set(cardName, (map.get(cardName) || 0) + Number(txn.amount || 0));
     }
@@ -513,7 +532,7 @@ export default function DashboardClient({
         <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
           <Panel
             title="Platform-wise Spend"
-            subtitle="Distribution of spend by platform."
+            subtitle="Distribution of spend by platform"
           >
             <div style={{ height: 300 }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -527,15 +546,11 @@ export default function DashboardClient({
                     outerRadius={100}
                     innerRadius={58}
                     paddingAngle={4}
-                    label={({ name, percent }) =>
-                      `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                    }
-                    labelLine
                   >
-                    {byPlatformData.map((_, index) => (
+                    {byPlatformData.map((entry, index) => (
                       <Cell
-                        key={index}
-                        fill={donutPalette[index % donutPalette.length]}
+                        key={entry.name}
+                        fill={getPlatformColor(entry.name, donutPalette[index % donutPalette.length])}
                       />
                     ))}
                   </Pie>
@@ -554,7 +569,7 @@ export default function DashboardClient({
 
           <Panel
             title="Card-wise Spend"
-            subtitle="Distribution of spend by card."
+            subtitle="Distribution of spend by card"
           >
             <div style={{ height: 300 }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -568,17 +583,13 @@ export default function DashboardClient({
                     outerRadius={100}
                     innerRadius={58}
                     paddingAngle={4}
-                    label={({ name, percent }) =>
-                      `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                    }
-                    labelLine
                   >
-                    {byCardData.map((_, index) => (
-                      <Cell
-                        key={index}
-                        fill={donutPalette[index % donutPalette.length]}
-                      />
-                    ))}
+                    {byCardData.map((entry, index) => (
+                  <Cell
+                    key={entry.name}
+                    fill={getCardColor(entry.name, donutPalette[index % donutPalette.length])}
+                  />
+                ))}
                   </Pie>
                   <Tooltip
                     formatter={(value: any) => formatCurrency(Number(value))}

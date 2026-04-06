@@ -304,51 +304,88 @@ export default function TransactionWorkbenchCard({
   }
 
   async function saveSplits(transactionId: string) {
-    if (!form || form.ownership_type !== "shared") return;
+  const originalSplits = splitsByTransactionId[transactionId] || [];
+  const existingIds = new Set(originalSplits.map((split) => split.id));
 
-    const originalSplits = splitsByTransactionId[transactionId] || [];
-    const existingIds = new Set(originalSplits.map((split) => split.id));
-    const currentIds = new Set(
-      editableSplits.filter((split) => !split.isNew).map((split) => split.id),
-    );
-
-    const deletedIds = [...existingIds].filter((id) => !currentIds.has(id));
-
+  // If ownership is no longer shared, remove all backend splits
+  if (!form || form.ownership_type !== "shared") {
     await Promise.all(
-      editableSplits.map(async (split) => {
-        const payload = {
-          transaction_id: transactionId,
-          person_name: split.person_name,
-          amount_owed: Number(split.amount_owed || 0),
-          status: split.status,
-          comment: split.comment || null,
-        };
-
-        if (split.isNew) {
-          await fetch("/api/splits", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          return;
-        }
-
-        await fetch(`/api/splits/${split.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+      [...existingIds].map(async (id) => {
+        const res = await fetch(`/api/splits/${id}`, {
+          method: "DELETE",
         });
+
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to delete split");
+        }
       }),
     );
 
-    await Promise.all(
-      deletedIds.map((id) =>
-        fetch(`/api/splits/${id}`, {
-          method: "DELETE",
-        }),
-      ),
-    );
+    return;
   }
+
+  const currentIds = new Set(
+    editableSplits.filter((split) => !split.isNew).map((split) => split.id),
+  );
+
+  const deletedIds = [...existingIds].filter((id) => !currentIds.has(id));
+
+  await Promise.all(
+    editableSplits.map(async (split) => {
+      const payload = {
+        transaction_id: transactionId,
+        person_name: split.person_name,
+        amount_owed: Number(split.amount_owed || 0),
+        status: split.status,
+        comment: split.comment || null,
+      };
+
+      if (split.isNew) {
+        const res = await fetch("/api/splits", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to create split");
+        }
+
+        return;
+      }
+
+      const res = await fetch(`/api/splits/${split.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to update split");
+      }
+    }),
+  );
+
+  await Promise.all(
+    deletedIds.map(async (id) => {
+      const res = await fetch(`/api/splits/${id}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to delete split");
+      }
+    }),
+  );
+}
 
   async function handleSave() {
     if (!selectedTxn || !form || !isDirty) return;
@@ -674,7 +711,6 @@ export default function TransactionWorkbenchCard({
                       {formatAmount(selectedTxn.amount)}
                     </p>
                   </div>
-                  
                 </div>
               </div>
 
@@ -687,7 +723,7 @@ export default function TransactionWorkbenchCard({
                     type="text"
                     value={form.product_name}
                     onChange={(e) => updateField("product_name", e.target.value)}
-                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                   />
                 </div>
 
@@ -699,7 +735,7 @@ export default function TransactionWorkbenchCard({
                     type="text"
                     value={form.platform_code}
                     onChange={(e) => updateField("platform_code", e.target.value)}
-                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                   />
                 </div>
 
@@ -710,7 +746,7 @@ export default function TransactionWorkbenchCard({
                   <select
                     value={form.ownership_type}
                     onChange={(e) => updateField("ownership_type", e.target.value)}
-                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                   >
                     <option value="mine">Mine</option>
                     <option value="shared">Shared</option>
@@ -726,7 +762,7 @@ export default function TransactionWorkbenchCard({
                   <select
                     value={form.review_status}
                     onChange={(e) => updateField("review_status", e.target.value)}
-                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                   >
                     <option value="needs_review">Needs review</option>
                     <option value="confirmed">Confirmed</option>
@@ -742,7 +778,7 @@ export default function TransactionWorkbenchCard({
                     value={form.note}
                     onChange={(e) => updateField("note", e.target.value)}
                     rows={4}
-                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                    className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                     placeholder="Add context for this transaction"
                   />
                 </div>
@@ -824,7 +860,7 @@ export default function TransactionWorkbenchCard({
                                 type="text"
                                 value={split.person_name}
                                 onChange={(e) => updateSplitField(split.id, "person_name", e.target.value)}
-                                className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                                className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                               />
                             </div>
 
@@ -835,7 +871,7 @@ export default function TransactionWorkbenchCard({
                                 step="0.01"
                                 value={split.amount_owed}
                                 onChange={(e) => updateSplitField(split.id, "amount_owed", e.target.value)}
-                                className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                                className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                               />
                             </div>
 
@@ -844,7 +880,7 @@ export default function TransactionWorkbenchCard({
                               <select
                                 value={split.status}
                                 onChange={(e) => updateSplitField(split.id, "status", e.target.value)}
-                                className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                                className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                               >
                                 <option value="pending">Pending</option>
                                 <option value="collected">Collected</option>
@@ -858,7 +894,7 @@ export default function TransactionWorkbenchCard({
                                 type="text"
                                 value={split.comment}
                                 onChange={(e) => updateSplitField(split.id, "comment", e.target.value)}
-                                className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                                className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                               />
                             </div>
                           </div>

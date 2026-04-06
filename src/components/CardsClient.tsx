@@ -413,7 +413,7 @@ export default function CardsClient({ cards }: { cards: Card[] }) {
                       onChange={(e) =>
                         updateCreateField("supported_card_type_id", e.target.value)
                       }
-                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                     >
                       <option value="">Select a supported card</option>
                       {supportedTypes.map((type) => (
@@ -437,7 +437,7 @@ export default function CardsClient({ cards }: { cards: Card[] }) {
                           e.target.value.replace(/\D/g, "").slice(0, 4),
                         )
                       }
-                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                       placeholder="2862"
                       maxLength={4}
                     />
@@ -453,7 +453,7 @@ export default function CardsClient({ cards }: { cards: Card[] }) {
                       onChange={(e) =>
                         updateCreateField("cardholder_name", e.target.value)
                       }
-                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                       placeholder="Shubhangan Das"
                     />
                   </div>
@@ -480,7 +480,7 @@ export default function CardsClient({ cards }: { cards: Card[] }) {
                           e.target.value.replace(/\D/g, "").slice(0, 4),
                         )
                       }
-                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                       maxLength={4}
                       placeholder="2862"
                     />
@@ -496,7 +496,7 @@ export default function CardsClient({ cards }: { cards: Card[] }) {
                       onChange={(e) =>
                         updateEditField("cardholder_name", e.target.value)
                       }
-                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                       placeholder="Cardholder name"
                     />
                   </div>
@@ -510,7 +510,7 @@ export default function CardsClient({ cards }: { cards: Card[] }) {
                       onChange={(e) =>
                         updateEditField("is_active", e.target.value === "active")
                       }
-                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-300"
+                      className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-300"
                     >
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
