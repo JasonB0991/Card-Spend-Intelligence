@@ -282,14 +282,25 @@ function parseAgoda(email: EmailRow): PlatformOrder | null {
     text.match(/Paid Today\s*Rs\.?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
     text.match(/Total Charge\s*Rs\.?\s*([\d,]+(?:\.\d{1,2})?)/i);
 
-  const propertyMatch =
-    text.match(/Manage my booking\s+(.+?)\s+\d(?:\.\d)?\s*stars/i) ||
-    text.match(/Manage my booking\s+(.+?)\s+property image/i) ||
-    text.match(/Your booking is now confirmed!\s+Hi .+?\s+Manage my booking\s+(.+?)\s+\d(?:\.\d)?\s*stars/i);
-
   const roomTypeMatch = text.match(/Room type\s+(.+?)\s+Promotion/i);
 
-  const propertyName = propertyMatch?.[1]?.trim() || null;
+  // Stronger property extraction:
+  // Capture the line immediately after "Manage my booking"
+  let propertyName: string | null = null;
+
+  const manageBookingSplit = text.split(/Manage my booking/i);
+  if (manageBookingSplit.length > 1) {
+    const afterManage = manageBookingSplit[1].trim();
+
+    const propertyMatch =
+      afterManage.match(/^(.+?)\s+\d(?:\.\d)?\s*stars/i) ||
+      afterManage.match(/^(.+?)\s+property image/i) ||
+      afterManage.match(/^(.+?)\s+Junction\s/i) ||
+      afterManage.match(/^(.+?)\s+Check in/i);
+
+    propertyName = propertyMatch?.[1]?.trim() || null;
+  }
+
   const roomType = roomTypeMatch?.[1]?.trim() || null;
 
   let orderTitle: string | null = null;
@@ -301,15 +312,6 @@ function parseAgoda(email: EmailRow): PlatformOrder | null {
   } else if (roomType) {
     orderTitle = roomType;
   }
-
-  console.log("AGODA DEBUG", {
-    preview: text.slice(0, 1000),
-    bookingId: bookingIdMatch?.[1],
-    total: totalMatch?.[1],
-    propertyName,
-    roomType,
-    orderTitle,
-  });
 
   return {
     supported_platform_type_code: "agoda",
