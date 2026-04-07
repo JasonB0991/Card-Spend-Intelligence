@@ -219,25 +219,28 @@ function parseZomato(email: EmailRow): PlatformOrder | null {
 
   const restaurantMatch =
     text.match(/ordering from\s+(.+?)\s+ORDER ID/i) ||
-    text.match(/Your Zomato order from\s+(.+?)\s+Chicken/i);
+    text.match(/Thank you for ordering from\s+(.+?)\s+ORDER ID/i) ||
+    text.match(/Your Zomato order from\s+(.+?)\s+ORDER ID/i);
 
   const itemMatch =
     text.match(/\b\d+\s*X\s+(.+?)\s+Total paid/i) ||
     text.match(/Items\s+(.+?)\s+Is this correct/i) ||
-    text.match(/Chicken\s+\d+/i);
+    text.match(/\b\d+\s*X\s+(.+)/i);
+
+  const item = itemMatch?.[1]?.trim() || null;
+  const restaurant = restaurantMatch?.[1]?.trim() || null;
 
   console.log("ZOMATO CLEAN DEBUG", {
-    text: text.slice(0, 400),
-    restaurant: restaurantMatch?.[1],
-    item: itemMatch?.[1] || itemMatch?.[0],
+    restaurant,
+    item,
   });
 
   return {
     supported_platform_type_code: "zomato",
     order_amount: parseMoney(totalMatch?.[1]),
     currency: "INR",
-    order_title: (itemMatch?.[1] || itemMatch?.[0] || null)?.trim() || null,
-    merchant_name: restaurantMatch?.[1]?.trim() || null,
+    order_title: item,
+    merchant_name: restaurant,
     order_reference: orderIdMatch?.[1] || null,
     order_date: null,
     raw_platform: "Zomato",
@@ -265,6 +268,7 @@ function parseAmazon(email: EmailRow): PlatformOrder | null {
     raw_platform: "Amazon",
   };
 }
+
 function parseAgoda(email: EmailRow): PlatformOrder | null {
   const from = (email.from_email || "").toLowerCase();
   const text = getEmailText(email);
@@ -276,7 +280,7 @@ function parseAgoda(email: EmailRow): PlatformOrder | null {
 
   const bookingIdMatch =
     text.match(/booking ID is\s*(\d+)/i) ||
-    text.match(/Booking ID\s*(\d+)/i);
+    text.match(/Booking ID[:\s]+(\d+)/i);
 
   const totalMatch =
     text.match(/Paid Today\s*Rs\.?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
@@ -284,23 +288,12 @@ function parseAgoda(email: EmailRow): PlatformOrder | null {
 
   const roomTypeMatch = text.match(/Room type\s+(.+?)\s+Promotion/i);
 
-  // Stronger property extraction:
-  // Capture the line immediately after "Manage my booking"
-  let propertyName: string | null = null;
+  const propertyMatch =
+    text.match(/(?:Manage my booking\s+){1,2}(.+?)\s+Junction\s+\d+/i) ||
+    text.match(/(?:Manage my booking\s+){1,2}(.+?)\s+Directions\s+Check in/i) ||
+    text.match(/(?:Manage my booking\s+){1,2}(.+?)\s+Check in/i);
 
-  const manageBookingSplit = text.split(/Manage my booking/i);
-  if (manageBookingSplit.length > 1) {
-    const afterManage = manageBookingSplit[1].trim();
-
-    const propertyMatch =
-      afterManage.match(/^(.+?)\s+\d(?:\.\d)?\s*stars/i) ||
-      afterManage.match(/^(.+?)\s+property image/i) ||
-      afterManage.match(/^(.+?)\s+Junction\s/i) ||
-      afterManage.match(/^(.+?)\s+Check in/i);
-
-    propertyName = propertyMatch?.[1]?.trim() || null;
-  }
-
+  const propertyName = propertyMatch?.[1]?.trim() || null;
   const roomType = roomTypeMatch?.[1]?.trim() || null;
 
   let orderTitle: string | null = null;
@@ -313,6 +306,15 @@ function parseAgoda(email: EmailRow): PlatformOrder | null {
     orderTitle = roomType;
   }
 
+  console.log("AGODA DEBUG", {
+    preview: text.slice(0, 1200),
+    bookingId: bookingIdMatch?.[1],
+    total: totalMatch?.[1],
+    propertyName,
+    roomType,
+    orderTitle,
+  });
+
   return {
     supported_platform_type_code: "agoda",
     order_amount: parseMoney(totalMatch?.[1]),
@@ -324,24 +326,33 @@ function parseAgoda(email: EmailRow): PlatformOrder | null {
     raw_platform: "Agoda",
   };
 }
-
 function parseFlipkart(email: EmailRow): PlatformOrder | null {
   const from = (email.from_email || "").toLowerCase();
   const text = getEmailText(email);
 
   if (!from.includes("no-reply@rmt.flipkart.com")) return null;
 
-  const orderIdMatch = text.match(/Order ID\s+(OD[0-9]+)/i);
-  const totalMatch = text.match(/total\s+₨\.?\s*([\d.]+)/i);
+  const orderIdMatch =
+    text.match(/Order ID\s+(OD[0-9]+)/i) ||
+    text.match(/Order number\s+(OD[0-9]+)/i);
 
-  const titleMatch = text.match(/Govee HDMI.*?(?=Seller)/i);
+  const totalMatch =
+    text.match(/Amount Paid\s*₨\.?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
+    text.match(/total\s+₨\.?\s*([\d,]+(?:\.\d{1,2})?)/i);
+
+  const titleMatch =
+    text.match(/You will receive the next update.*?\s+(.+?)\s+Delivery by/i) ||
+    text.match(/Manage Your Order.*?\s+(.+?)\s+Delivery by/i) ||
+    text.match(/Order for\s+(.+?)\s+has been successfully placed/i);
+
+  const sellerMatch = text.match(/Seller:\s*([A-Za-z0-9 _.-]+)/i);
 
   return {
     supported_platform_type_code: "flipkart",
     order_amount: parseMoney(totalMatch?.[1]),
     currency: "INR",
-    order_title: titleMatch?.[0]?.trim() || null,
-    merchant_name: "Flipkart",
+    order_title: titleMatch?.[1]?.trim() || null,
+    merchant_name: sellerMatch?.[1]?.trim() || "Flipkart",
     order_reference: orderIdMatch?.[1] || null,
     order_date: null,
     raw_platform: "Flipkart",

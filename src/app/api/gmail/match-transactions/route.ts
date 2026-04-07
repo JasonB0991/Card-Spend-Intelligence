@@ -15,6 +15,7 @@ function getPlatformCodeFromTransaction(txn: any): string | null {
   if (merchant.includes("airtel")) return "airtel";
   if (merchant.includes("uber")) return "uber";
   if (merchant.includes("zepto")) return "zepto";
+  if (merchant.includes("agoda")) return "agoda";
 
   return null;
 }

@@ -19,6 +19,7 @@ function getPlatformCodeFromTransaction(txn: any): string | null {
   return null;
 }
 
+
 function isCompatiblePlatform(txnPlatformCode: string, orderPlatformCode: string) {
   if (txnPlatformCode === orderPlatformCode) return true;
 
@@ -32,6 +33,7 @@ function isCompatiblePlatform(txnPlatformCode: string, orderPlatformCode: string
 
   return false;
 }
+
 
 function amountsClose(a: number | null, b: number | null) {
   if (a == null || b == null) return false;
@@ -98,6 +100,14 @@ export async function processTransactionMatches() {
     const txnPlatformCode = getPlatformCodeFromTransaction(txn);
 
     if (!txnPlatformCode) {
+      console.log("MATCH DEBUG - no platform code", {
+        txnId: txn.id,
+        txnAmount: txn.amount,
+        txnMerchantRaw: txn.merchant_raw,
+        txnMerchantNormalized: txn.merchant_normalized,
+        txnProductName: txn.product_name,
+      });
+
       skippedCount++;
       continue;
     }

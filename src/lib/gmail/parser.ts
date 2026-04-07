@@ -47,6 +47,10 @@ function normalizeMerchant(name: string) {
   if (upper.includes("AMAZON")) return "Amazon";
   if (upper.includes("FLIPKART")) return "Flipkart";
   if (upper.includes("UBER")) return "Uber";
+  if (upper.startsWith("AGODA")) {
+  const tail = upper.slice(5).replace(/[^A-Z0-9]/g, "");
+  return tail ? `Agoda ${tail}` : "Agoda";
+}
 
   return cleaned;
 }
