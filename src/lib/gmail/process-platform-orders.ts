@@ -44,7 +44,7 @@ export async function processPlatformOrders() {
     const { data: supportedType, error: supportedTypeError } = await supabaseAdmin
       .from("supported_platform_types")
       .select("id")
-      .eq("code", parsed.supported_platform_type_code)
+      .eq("code", parsed.supported_platform_type_code.toLowerCase())
       .maybeSingle();
 
     if (supportedTypeError || !supportedType) {

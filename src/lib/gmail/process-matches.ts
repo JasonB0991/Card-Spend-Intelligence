@@ -14,6 +14,7 @@ function getPlatformCodeFromTransaction(txn: any): string | null {
   if (merchant.includes("airtel")) return "airtel";
   if (merchant.includes("uber")) return "uber";
   if (merchant.includes("zepto")) return "zepto";
+  if (merchant.includes("agoda")) return "agoda";
 
   return null;
 }
@@ -51,6 +52,12 @@ function timeDistanceInHours(txnDate: string | null, orderDate: string | null) {
 }
 
 function buildProductName(order: any): string | null {
+  const platformCode = order.supported_platform_types?.code;
+
+  if (platformCode === "agoda") {
+    return order.order_title || order.merchant_name || order.raw_platform || null;
+  }
+
   if (order.order_title && order.merchant_name) {
     return `${order.order_title} from ${order.merchant_name}`;
   }

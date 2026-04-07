@@ -282,9 +282,10 @@ function parseAgoda(email: EmailRow): PlatformOrder | null {
     text.match(/Paid Today\s*Rs\.?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
     text.match(/Total Charge\s*Rs\.?\s*([\d,]+(?:\.\d{1,2})?)/i);
 
-  const propertyMatch = text.match(
-    /Manage my booking\s+(.+?)\s+\d(?:\.\d)?\s*stars?/i
-  );
+  const propertyMatch =
+    text.match(/Manage my booking\s+(.+?)\s+\d(?:\.\d)?\s*stars/i) ||
+    text.match(/Manage my booking\s+(.+?)\s+property image/i) ||
+    text.match(/Your booking is now confirmed!\s+Hi .+?\s+Manage my booking\s+(.+?)\s+\d(?:\.\d)?\s*stars/i);
 
   const roomTypeMatch = text.match(/Room type\s+(.+?)\s+Promotion/i);
 
@@ -302,7 +303,7 @@ function parseAgoda(email: EmailRow): PlatformOrder | null {
   }
 
   console.log("AGODA DEBUG", {
-    preview: text.slice(0, 800),
+    preview: text.slice(0, 1000),
     bookingId: bookingIdMatch?.[1],
     total: totalMatch?.[1],
     propertyName,
