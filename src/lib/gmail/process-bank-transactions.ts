@@ -42,27 +42,42 @@ export async function processBankTransactions() {
     }
 
     let cardId: string | null = null;
+    let finalCardLabel = parsed.card_label;
 
-    if (parsed.supported_card_type_code && parsed.card_last4) {
-      const { data: supportedType } = await supabaseAdmin
-        .from("supported_card_types")
-        .select("id")
-        .eq("code", parsed.supported_card_type_code)
+    if (parsed.card_last4) {
+      const { data: matchedCard } = await supabaseAdmin
+        .from("cards")
+        .select(`
+          id,
+          card_last4,
+          nickname,
+          supported_card_types (
+            id,
+            code,
+            bank_name,
+            card_name,
+            network,
+            parser_key,
+            is_active
+          )
+        `)
+        .eq("card_last4", parsed.card_last4)
+        .eq("is_active", true)
         .maybeSingle();
 
-      if (supportedType?.id) {
-        const { data: card } = await supabaseAdmin
-          .from("cards")
-          .select("id")
-          .eq("supported_card_type_id", supportedType.id)
-          .eq("card_last4", parsed.card_last4)
-          .eq("is_active", true)
-          .maybeSingle();
+      if (matchedCard?.id) {
+  cardId = matchedCard.id;
 
-        if (card?.id) {
-          cardId = card.id;
-        }
-      }
+    const supportedType = Array.isArray(matchedCard.supported_card_types)
+      ? matchedCard.supported_card_types[0]
+      : matchedCard.supported_card_types;
+
+    finalCardLabel =
+      matchedCard.nickname ||
+      (supportedType
+        ? `${supportedType.bank_name} ${supportedType.card_name}`
+        : parsed.card_label);
+  }
     }
 
     const { error } = await supabaseAdmin.from("transactions").insert({
@@ -78,7 +93,7 @@ export async function processBankTransactions() {
       is_emi: parsed.is_emi,
       is_ignored: parsed.is_ignored,
       card_last4: parsed.card_last4,
-      card_label: parsed.card_label,
+      card_label: finalCardLabel,
       card_id: cardId,
       txn_date: parsed.txn_date,
       review_status: "needs_review",
