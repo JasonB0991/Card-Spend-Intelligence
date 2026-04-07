@@ -265,6 +265,62 @@ function parseAmazon(email: EmailRow): PlatformOrder | null {
     raw_platform: "Amazon",
   };
 }
+function parseAgoda(email: EmailRow): PlatformOrder | null {
+  const from = (email.from_email || "").toLowerCase();
+  const text = getEmailText(email);
+
+  if (!from.includes("no-reply@agoda.com")) return null;
+  if (!/booking is now confirmed/i.test(text)) return null;
+  if (!/booking id/i.test(text)) return null;
+  if (!/paid today/i.test(text)) return null;
+
+  const bookingIdMatch =
+    text.match(/booking ID is\s*(\d+)/i) ||
+    text.match(/Booking ID\s*(\d+)/i);
+
+  const totalMatch =
+    text.match(/Paid Today\s*Rs\.?\s*([\d,]+(?:\.\d{1,2})?)/i) ||
+    text.match(/Total Charge\s*Rs\.?\s*([\d,]+(?:\.\d{1,2})?)/i);
+
+  const propertyMatch = text.match(
+    /Manage my booking\s+(.+?)\s+\d(?:\.\d)?\s*stars?/i
+  );
+
+  const roomTypeMatch = text.match(/Room type\s+(.+?)\s+Promotion/i);
+
+  const propertyName = propertyMatch?.[1]?.trim() || null;
+  const roomType = roomTypeMatch?.[1]?.trim() || null;
+
+  let orderTitle: string | null = null;
+
+  if (propertyName && roomType) {
+    orderTitle = `${propertyName} — ${roomType}`;
+  } else if (propertyName) {
+    orderTitle = propertyName;
+  } else if (roomType) {
+    orderTitle = roomType;
+  }
+
+  console.log("AGODA DEBUG", {
+    preview: text.slice(0, 800),
+    bookingId: bookingIdMatch?.[1],
+    total: totalMatch?.[1],
+    propertyName,
+    roomType,
+    orderTitle,
+  });
+
+  return {
+    supported_platform_type_code: "agoda",
+    order_amount: parseMoney(totalMatch?.[1]),
+    currency: "INR",
+    order_title: orderTitle,
+    merchant_name: propertyName || "Agoda",
+    order_reference: bookingIdMatch?.[1] || null,
+    order_date: null,
+    raw_platform: "Agoda",
+  };
+}
 
 function parseFlipkart(email: EmailRow): PlatformOrder | null {
   const from = (email.from_email || "").toLowerCase();
@@ -296,6 +352,7 @@ export function parsePlatformOrderEmail(email: EmailRow): PlatformOrder | null {
     parseZomato(email) ||
     parseAmazon(email) ||
     parseFlipkart(email) ||
+    parseAgoda(email) ||
     null
   );
 }
