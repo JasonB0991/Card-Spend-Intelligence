@@ -347,6 +347,11 @@ function parseIdfcFirstCreditCardDebit(email: EmailRow): ParsedTransaction | nul
   const merchantRaw = match[3].trim();
   const datePart = match[4];
   const txnDate = toIsoFromIdfcFormat(datePart);
+  
+  let cardLabel = "IDFC FIRST Credit Card";
+  if (cardLast4 === "1980") {
+    cardLabel = "IDFC First UPI Card";
+  }
 
   return {
     amount,
@@ -360,7 +365,7 @@ function parseIdfcFirstCreditCardDebit(email: EmailRow): ParsedTransaction | nul
     is_emi: false,
     is_ignored: false,
     card_last4: cardLast4,
-    card_label: "IDFC FIRST Credit Card",
+    card_label: cardLabel,
     supported_card_type_code: "idfc_first_credit_card",
     txn_date: txnDate,
   };
