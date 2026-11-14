@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/request";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { getRequestOrigin } from "@/lib/request-origin";
 
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
@@ -19,7 +20,8 @@ async function getGrantedScopes(accessToken?: string | null): Promise<string[]> 
 }
 
 export async function GET(req: NextRequest) {
-  const { searchParams, origin } = new URL(req.url);
+  const { searchParams } = new URL(req.url);
+  const origin = getRequestOrigin(req);
   const code = searchParams.get("code");
   const oauthError = searchParams.get("error_description") || searchParams.get("error");
 
