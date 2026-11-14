@@ -84,6 +84,12 @@ function LoginForm() {
         <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>
       )}
 
+      <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+        <strong>Important:</strong> on Google&rsquo;s permission screen, tick{" "}
+        <em>&ldquo;View your email messages and settings&rdquo;</em> (or click{" "}
+        <em>Select all</em>). Without it Spendzo can&rsquo;t read your card alerts.
+      </p>
+
       <p className="mt-6 text-xs leading-relaxed text-slate-500">
         This is a private test. Google will show an &ldquo;app isn&rsquo;t
         verified&rdquo; warning; choose <em>Advanced → Continue</em>. Access
