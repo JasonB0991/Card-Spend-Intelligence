@@ -1,46 +1,43 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { syncEmailsFromGmail } from "@/lib/gmail/sync-emails";
-import { processBankTransactions } from "@/lib/gmail/process-bank-transactions";
-import { processPlatformOrders } from "@/lib/gmail/process-platform-orders";
-import { processTransactionMatches } from "@/lib/gmail/process-matches";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import { processMailboxForUser } from "@/lib/gmail/process-mailbox";
+
+export const maxDuration = 60;
 
 function isAuthorized(req: NextRequest) {
-  const headerSecret = req.headers.get("x-cron-secret");
-  return (
-    typeof headerSecret === "string" &&
-    typeof process.env.MAILBOX_CRON_SECRET === "string" &&
-    headerSecret === process.env.MAILBOX_CRON_SECRET
-  );
+  const expected = process.env.MAILBOX_CRON_SECRET;
+  const given = req.headers.get("x-cron-secret");
+  if (!expected || !given) return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/** Called by Supabase pg_cron: processes every connected mailbox. */
 export async function POST(req: NextRequest) {
-
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const syncResult = await syncEmailsFromGmail();
-    const bankResult = await processBankTransactions();
-    const platformResult = await processPlatformOrders();
-    const matchResult = await processTransactionMatches();
+  const { data: accounts, error } = await supabaseAdmin
+    .from("gmail_accounts")
+    .select("user_id")
+    .not("refresh_token", "is", null);
 
-    return NextResponse.json({
-      success: true,
-      syncResult,
-      bankResult,
-      platformResult,
-      matchResult,
-    });
-  } catch (error: any) {
-    console.error("Process mailbox error:", error);
-
-    return NextResponse.json(
-      {
-        error: "Failed to process mailbox",
-        details: error?.message || "Unknown error",
-      },
-      { status: 500 }
-    );
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  const results: Record<string, unknown> = {};
+  for (const { user_id } of accounts || []) {
+    try {
+      const r = await processMailboxForUser(user_id);
+      results[user_id] = { ok: true, saved: r.syncResult.saved };
+    } catch (err) {
+      results[user_id] = { ok: false, error: (err as Error).message };
+    }
+  }
+
+  return NextResponse.json({ success: true, users: results });
 }

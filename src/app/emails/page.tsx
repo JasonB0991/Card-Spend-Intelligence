@@ -1,16 +1,4 @@
-import { getAppUrl } from "@/lib/app-url";
-async function getEmails() {
-  const res = await fetch(`${getAppUrl()}/api/emails`, {
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    const raw = await res.text();
-    throw new Error(`Failed to fetch emails: ${raw}`);
-  }
-
-  return res.json();
-}
+import { getEmails } from "@/lib/data";
 
 export default async function EmailsPage() {
   const emails = await getEmails();

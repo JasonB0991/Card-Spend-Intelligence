@@ -1,10 +1,11 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { parseBankTransactionEmail } from "@/lib/gmail/parser";
 
-export async function processBankTransactions() {
+export async function processBankTransactions(userId: string) {
   const { data: emails, error: emailsError } = await supabaseAdmin
     .from("emails")
     .select("*")
+    .eq("user_id", userId)
     .order("sent_at", { ascending: false })
     .limit(100);
 
@@ -29,6 +30,7 @@ export async function processBankTransactions() {
       .from("transactions")
       .select("id")
       .eq("email_id", email.id)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (existingError) {
@@ -62,6 +64,7 @@ export async function processBankTransactions() {
           )
         `)
         .eq("card_last4", parsed.card_last4)
+        .eq("user_id", userId)
         .eq("is_active", true)
         .maybeSingle();
 
@@ -81,6 +84,7 @@ export async function processBankTransactions() {
     }
 
     const { error } = await supabaseAdmin.from("transactions").insert({
+      user_id: userId,
       email_id: email.id,
       amount: parsed.amount,
       currency: parsed.currency,

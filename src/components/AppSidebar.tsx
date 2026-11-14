@@ -1,7 +1,30 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import ProcessMailboxButton from "@/components/ProcessMailboxButton";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
+function useUserEmail() {
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => {
+    createSupabaseBrowserClient()
+      .auth.getUser()
+      .then(({ data }) => setEmail(data.user?.email ?? null));
+  }, []);
+  return email;
+}
+
+function IconSignOut() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
+      <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+      <path d="M10 17l-5-5 5-5" />
+      <path d="M5 12h11" />
+    </svg>
+  );
+}
 
 type NavItem = {
   href: string;
@@ -54,6 +77,7 @@ export default function AppSidebar({
   onToggle,
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const email = useUserEmail();
 
   const navItems: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: <IconDashboard /> },
@@ -96,6 +120,20 @@ export default function AppSidebar({
             );
           })}
         </nav>
+
+        <div className="mt-auto flex flex-col items-center gap-2">
+          <ProcessMailboxButton compact />
+          <form action="/auth/signout" method="post">
+            <button
+              type="submit"
+              className="flex h-12 w-12 items-center justify-center rounded-2xl text-slate-500 transition hover:bg-white hover:text-slate-900"
+              aria-label="Sign out"
+              title={email ? `Sign out (${email})` : "Sign out"}
+            >
+              <IconSignOut />
+            </button>
+          </form>
+        </div>
       </aside>
     );
   }
@@ -144,6 +182,24 @@ export default function AppSidebar({
             );
           })}
         </nav>
+      </div>
+
+      <div className="mt-auto space-y-2 border-t border-emerald-100 px-2 pt-4">
+        <ProcessMailboxButton />
+        <form action="/auth/signout" method="post">
+          <button
+            type="submit"
+            className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-white hover:text-slate-900"
+          >
+            <span className="text-slate-500"><IconSignOut /></span>
+            Sign out
+          </button>
+        </form>
+        {email && (
+          <p className="truncate px-4 text-xs text-slate-500" title={email}>
+            {email}
+          </p>
+        )}
       </div>
     </aside>
   );

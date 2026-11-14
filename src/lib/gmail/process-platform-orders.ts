@@ -1,10 +1,11 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { parsePlatformOrderEmail } from "@/lib/gmail/platform-parser";
 
-export async function processPlatformOrders() {
+export async function processPlatformOrders(userId: string) {
   const { data: emails, error: emailsError } = await supabaseAdmin
     .from("emails")
     .select("*")
+    .eq("user_id", userId)
     .order("sent_at", { ascending: false })
     .limit(200);
 
@@ -29,6 +30,7 @@ export async function processPlatformOrders() {
       .from("platform_orders")
       .select("id")
       .eq("email_id", email.id)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (existingError) {
@@ -53,6 +55,7 @@ export async function processPlatformOrders() {
     }
 
     const { error } = await supabaseAdmin.from("platform_orders").insert({
+      user_id: userId,
       email_id: email.id,
       supported_platform_type_id: supportedType.id,
       order_date: parsed.order_date,

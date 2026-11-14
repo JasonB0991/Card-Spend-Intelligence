@@ -68,10 +68,11 @@ function buildProductName(order: any): string | null {
   return order.raw_platform || null;
 }
 
-export async function processTransactionMatches() {
+export async function processTransactionMatches(userId: string) {
   const { data: transactions, error: transactionsError } = await supabaseAdmin
     .from("transactions")
     .select("*")
+    .eq("user_id", userId)
     .order("txn_date", { ascending: false })
     .limit(200);
 
@@ -87,6 +88,7 @@ export async function processTransactionMatches() {
         code
       )
     `)
+    .eq("user_id", userId)
     .limit(200);
 
   if (ordersError) {
@@ -160,10 +162,12 @@ export async function processTransactionMatches() {
       .select("id")
       .eq("transaction_id", txn.id)
       .eq("platform_order_id", best.id)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (!existingMatch) {
       await supabaseAdmin.from("transaction_order_matches").insert({
+        user_id: userId,
         transaction_id: txn.id,
         platform_order_id: best.id,
         matched_product_name: productName,
@@ -179,7 +183,8 @@ export async function processTransactionMatches() {
           match_type: "amount_and_platform",
           confidence_score: 90,
         })
-        .eq("id", existingMatch.id);
+        .eq("id", existingMatch.id)
+        .eq("user_id", userId);
     }
 
     const updates: Record<string, unknown> = {
@@ -198,7 +203,8 @@ export async function processTransactionMatches() {
     const { error: updateTxnError } = await supabaseAdmin
       .from("transactions")
       .update(updates)
-      .eq("id", txn.id);
+      .eq("id", txn.id)
+      .eq("user_id", userId);
 
     if (updateTxnError) {
       skippedCount++;
