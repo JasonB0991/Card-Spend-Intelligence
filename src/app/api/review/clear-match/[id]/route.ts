@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/request";
 
 type RouteContext = {
   params: Promise<{
@@ -8,10 +8,14 @@ type RouteContext = {
 };
 
 export async function POST(_req: Request, context: RouteContext) {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const supabase = auth.supabase;
+
   try {
     const { id } = await context.params;
 
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from("transaction_order_matches")
       .delete()
       .eq("transaction_id", id);

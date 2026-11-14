@@ -84,32 +84,96 @@ function getHtmlFromPayload(payload: any): string {
   return "";
 }
 
-export async function syncEmailsFromGmail() {
+/**
+ * Only these senders are fetched from Gmail. Keep in sync with the `from`
+ * checks in parser.ts and platform-parser.ts.
+ */
+export const SUPPORTED_SENDERS = [
+  // Bank card alerts
+  "alerts@hdfcbank.bank.in",
+  "credit_cards@icicibank.com",
+  "onlinesbicard@sbicard.com",
+  "noreply@idfcfirstbank.com",
+  "alerts@yes.bank.in",
+  // Platform orders
+  "no-reply@swiggy.in",
+  "noreply@swiggy.in",
+  "noreply@zomato.com",
+  "auto-confirm@amazon.in",
+  "no-reply@rmt.flipkart.com",
+  "no-reply@agoda.com",
+];
+
+const GMAIL_QUERY = `from:(${SUPPORTED_SENDERS.join(" OR ")}) newer_than:180d`;
+
+export class GmailReauthRequiredError extends Error {
+  constructor() {
+    super("Gmail access has expired. Please sign out and sign in again.");
+    this.name = "GmailReauthRequiredError";
+  }
+}
+
+export async function syncEmailsFromGmail(userId: string) {
   const { data: account, error: accountError } = await supabaseAdmin
     .from("gmail_accounts")
     .select("*")
-    .eq("email", "me")
-    .single();
+    .eq("user_id", userId)
+    .maybeSingle();
 
-  if (accountError || !account) {
-    throw new Error("No Gmail account connected");
+  if (accountError || !account || (!account.refresh_token && !account.access_token)) {
+    throw new GmailReauthRequiredError();
   }
 
-  const gmail = getGmailClient({
-    access_token: account.access_token,
-    refresh_token: account.refresh_token,
-  });
+  const gmail = getGmailClient(
+    {
+      access_token: account.access_token,
+      refresh_token: account.refresh_token,
+    },
+    // Persist refreshed access tokens so we don't refresh on every run.
+    (tokens) => {
+      void supabaseAdmin
+        .from("gmail_accounts")
+        .update({
+          access_token: tokens.access_token ?? account.access_token,
+          ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
+          expiry_date: tokens.expiry_date ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId);
+    }
+  );
 
-  const listResponse = await gmail.users.messages.list({
-    userId: "me",
-    maxResults: 20,
-  });
+  let messages: { id?: string | null }[] = [];
+  try {
+    const listResponse = await gmail.users.messages.list({
+      userId: "me",
+      q: GMAIL_QUERY,
+      maxResults: 50,
+    });
+    messages = listResponse.data.messages || [];
+  } catch (err) {
+    const message = String((err as { message?: string })?.message || err);
+    if (message.includes("invalid_grant") || message.includes("No refresh token")) {
+      throw new GmailReauthRequiredError();
+    }
+    throw err;
+  }
 
-  const messages = listResponse.data.messages || [];
+  // Skip messages we already stored, to avoid re-downloading them.
+  const ids = messages.map((m) => m.id).filter((id): id is string => !!id);
+  const { data: existingRows } = ids.length
+    ? await supabaseAdmin
+        .from("emails")
+        .select("gmail_message_id")
+        .eq("user_id", userId)
+        .in("gmail_message_id", ids)
+    : { data: [] };
+  const existing = new Set((existingRows || []).map((r) => r.gmail_message_id));
+
   let saved = 0;
 
   for (const msg of messages) {
-    if (!msg.id) continue;
+    if (!msg.id || existing.has(msg.id)) continue;
 
     const detail = await gmail.users.messages.get({
       userId: "me",
@@ -129,6 +193,7 @@ export async function syncEmailsFromGmail() {
     const rawText = rawTextFromPlain || (rawHtml ? stripHtml(rawHtml) : "");
 
     const row = {
+      user_id: userId,
       gmail_message_id: detail.data.id!,
       thread_id: detail.data.threadId || null,
       from_email: from,
@@ -141,7 +206,7 @@ export async function syncEmailsFromGmail() {
 
     const { error } = await supabaseAdmin
       .from("emails")
-      .upsert(row, { onConflict: "gmail_message_id" });
+      .upsert(row, { onConflict: "user_id,gmail_message_id" });
 
     if (!error) {
       saved++;

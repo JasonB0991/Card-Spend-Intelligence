@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/request";
 
 type RouteContext = {
   params: Promise<{
@@ -8,6 +8,10 @@ type RouteContext = {
 };
 
 export async function PATCH(req: NextRequest, context: RouteContext) {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const supabase = auth.supabase;
+
   try {
     const { id } = await context.params;
     const body = await req.json();
@@ -35,7 +39,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       );
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabase
       .from("splits")
       .update(updates)
       .eq("id", id)
@@ -61,6 +65,10 @@ export async function DELETE(
   _req: NextRequest,
   context: RouteContext
 ) {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const supabase = auth.supabase;
+
   try {
     const { id } = await context.params;
 
@@ -71,7 +79,7 @@ export async function DELETE(
       );
     }
 
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from("splits")
       .delete()
       .eq("id", id);

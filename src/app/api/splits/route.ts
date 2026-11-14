@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/request";
 
 export async function GET() {
-  const { data, error } = await supabaseAdmin
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const supabase = auth.supabase;
+
+  const { data, error } = await supabase
     .from("splits")
     .select("*")
     .order("person_name", { ascending: true });
@@ -15,6 +19,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser();
+  if (auth.response) return auth.response;
+  const supabase = auth.supabase;
+
   try {
     const body = await req.json();
 
@@ -33,7 +41,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabase
       .from("splits")
       .insert([
         {
