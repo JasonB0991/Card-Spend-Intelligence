@@ -2,7 +2,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 
 /**
  * Loads full email rows that still need processing: from one of `senders`,
- * among the user's latest `scanLimit` emails, and not in `processedIds`.
+ * among the user's latest `scanLimit` emails, not yet checked by a parser
+ * (`parsed_type` still "other"), and not in `processedIds`.
  *
  * Email bodies are large, so the candidate list is built from a lightweight
  * query first and only the needed bodies are downloaded.
@@ -17,6 +18,7 @@ export async function loadUnprocessedEmails(
     .from("emails")
     .select("id, from_email")
     .eq("user_id", userId)
+    .eq("parsed_type", "other")
     .order("sent_at", { ascending: false })
     .limit(scanLimit);
 
@@ -41,4 +43,15 @@ export async function loadUnprocessedEmails(
 
   if (bodyError) throw new Error(bodyError.message);
   return data || [];
+}
+
+/** Records that a parser has looked at these emails so they aren't re-read. */
+export async function markEmailsChecked(userId: string, ids: string[], parsedType: string) {
+  if (!ids.length) return;
+  const { error } = await supabaseAdmin
+    .from("emails")
+    .update({ parsed_type: parsedType })
+    .eq("user_id", userId)
+    .in("id", ids);
+  if (error) console.error("marking emails failed", error.message);
 }

@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { parsePlatformOrderEmail } from "@/lib/gmail/platform-parser";
-import { loadUnprocessedEmails } from "@/lib/gmail/load-emails";
+import { loadUnprocessedEmails, markEmailsChecked } from "@/lib/gmail/load-emails";
 import { PLATFORM_SENDERS } from "@/lib/gmail/sync-emails";
 
 export async function processPlatformOrders(userId: string) {
@@ -27,11 +27,13 @@ export async function processPlatformOrders(userId: string) {
   let duplicateCount = 0;
   let failedCount = 0;
   const inserts: Record<string, unknown>[] = [];
+  const unparsedIds: string[] = [];
 
   for (const email of emails) {
     const parsed = parsePlatformOrderEmail(email);
 
     if (!parsed) {
+      unparsedIds.push(email.id);
       skippedCount++;
       continue;
     }
@@ -72,8 +74,10 @@ export async function processPlatformOrders(userId: string) {
       failedCount += inserts.length;
     } else {
       parsedCount = inserts.length;
+      await markEmailsChecked(userId, inserts.map((r) => r.email_id as string), "platform_order");
     }
   }
+  await markEmailsChecked(userId, unparsedIds, "platform_unparsed");
 
   return {
     parsedCount,

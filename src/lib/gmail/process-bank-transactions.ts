@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { parseBankTransactionEmail } from "@/lib/gmail/parser";
-import { loadUnprocessedEmails } from "@/lib/gmail/load-emails";
+import { loadUnprocessedEmails, markEmailsChecked } from "@/lib/gmail/load-emails";
 import { BANK_SENDERS } from "@/lib/gmail/sync-emails";
 
 type SupportedCardType = {
@@ -45,11 +45,13 @@ export async function processBankTransactions(userId: string) {
   let skippedCount = 0;
   let duplicateCount = 0;
   const inserts: Record<string, unknown>[] = [];
+  const unparsedIds: string[] = [];
 
   for (const email of emails) {
     const parsed = parseBankTransactionEmail(email);
 
     if (!parsed) {
+      unparsedIds.push(email.id);
       skippedCount++;
       continue;
     }
@@ -107,8 +109,10 @@ export async function processBankTransactions(userId: string) {
       failedInsertCount = inserts.length;
     } else {
       parsedCount = inserts.length;
+      await markEmailsChecked(userId, inserts.map((r) => r.email_id as string), "bank_transaction");
     }
   }
+  await markEmailsChecked(userId, unparsedIds, "bank_unparsed");
 
   return {
     parsedCount,
