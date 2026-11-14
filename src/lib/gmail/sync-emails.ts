@@ -1,3 +1,4 @@
+import type { gmail_v1 } from "googleapis";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getGmailClient } from "@/lib/gmail/client";
 
@@ -88,14 +89,15 @@ function getHtmlFromPayload(payload: any): string {
  * Only these senders are fetched from Gmail. Keep in sync with the `from`
  * checks in parser.ts and platform-parser.ts.
  */
-export const SUPPORTED_SENDERS = [
-  // Bank card alerts
+export const BANK_SENDERS = [
   "alerts@hdfcbank.bank.in",
   "credit_cards@icicibank.com",
   "onlinesbicard@sbicard.com",
   "noreply@idfcfirstbank.com",
   "alerts@yes.bank.in",
-  // Platform orders
+];
+
+export const PLATFORM_SENDERS = [
   "no-reply@swiggy.in",
   "noreply@swiggy.in",
   "noreply@zomato.com",
@@ -103,6 +105,8 @@ export const SUPPORTED_SENDERS = [
   "no-reply@rmt.flipkart.com",
   "no-reply@agoda.com",
 ];
+
+export const SUPPORTED_SENDERS = [...BANK_SENDERS, ...PLATFORM_SENDERS];
 
 const GMAIL_QUERY = `from:(${SUPPORTED_SENDERS.join(" OR ")}) newer_than:180d`;
 
@@ -176,51 +180,65 @@ export async function syncEmailsFromGmail(userId: string) {
     : { data: [] };
   const existing = new Set((existingRows || []).map((r) => r.gmail_message_id));
 
+  // Download new messages in parallel, capped per run so a request stays well
+  // within the hosting time limit. Anything left is picked up on the next run.
+  const newIds = ids.filter((id) => !existing.has(id)).slice(0, MAX_NEW_PER_RUN);
+  const details = await Promise.all(
+    newIds.map((id) =>
+      gmail.users.messages
+        .get({ userId: "me", id, format: "full" })
+        .catch((err) => {
+          console.error("gmail get failed", id, (err as Error).message);
+          return null;
+        })
+    )
+  );
+
+  const rows = details
+    .filter((d): d is NonNullable<typeof d> => !!d?.data.id)
+    .map((detail) => toEmailRow(userId, detail.data));
+
   let saved = 0;
-
-  for (const msg of messages) {
-    if (!msg.id || existing.has(msg.id)) continue;
-
-    const detail = await gmail.users.messages.get({
-      userId: "me",
-      id: msg.id,
-      format: "full",
-    });
-
-    const payload = detail.data.payload;
-    const headers = payload?.headers || [];
-
-    const from = extractHeader(headers, "From");
-    const subject = extractHeader(headers, "Subject");
-    const dateHeader = extractHeader(headers, "Date");
-
-    const rawTextFromPlain = getPlainTextFromPayload(payload);
-    const rawHtml = getHtmlFromPayload(payload);
-    const rawText = rawTextFromPlain || (rawHtml ? stripHtml(rawHtml) : "");
-
-    const row = {
-      user_id: userId,
-      gmail_message_id: detail.data.id!,
-      thread_id: detail.data.threadId || null,
-      from_email: from,
-      subject,
-      sent_at: dateHeader ? new Date(dateHeader).toISOString() : null,
-      parsed_type: "other",
-      raw_text: rawText,
-      raw_html: rawHtml || null,
-    };
-
+  if (rows.length) {
     const { error } = await supabaseAdmin
       .from("emails")
-      .upsert(row, { onConflict: "user_id,gmail_message_id" });
-
-    if (!error) {
-      saved++;
-    }
+      .upsert(rows, { onConflict: "user_id,gmail_message_id" });
+    if (error) throw new Error(`Saving emails failed: ${error.message}`);
+    saved = rows.length;
   }
 
   return {
     fetched: messages.length,
     saved,
+    remaining: Math.max(0, ids.length - existing.size - newIds.length),
+  };
+}
+
+const MAX_NEW_PER_RUN = 15;
+
+type GmailMessage = gmail_v1.Schema$Message;
+
+function toEmailRow(userId: string, detail: GmailMessage) {
+  const payload = detail.payload;
+  const headers = payload?.headers || [];
+
+  const from = extractHeader(headers, "From");
+  const subject = extractHeader(headers, "Subject");
+  const dateHeader = extractHeader(headers, "Date");
+
+  const rawTextFromPlain = getPlainTextFromPayload(payload);
+  const rawHtml = getHtmlFromPayload(payload);
+  const rawText = rawTextFromPlain || (rawHtml ? stripHtml(rawHtml) : "");
+
+  return {
+    user_id: userId,
+    gmail_message_id: detail.id!,
+    thread_id: detail.threadId || null,
+    from_email: from,
+    subject,
+    sent_at: dateHeader ? new Date(dateHeader).toISOString() : null,
+    parsed_type: "other",
+    raw_text: rawText,
+    raw_html: rawHtml || null,
   };
 }

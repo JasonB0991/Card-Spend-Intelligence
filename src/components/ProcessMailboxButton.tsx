@@ -18,19 +18,25 @@ export default function ProcessMailboxButton({ compact = false }: Props) {
 
     try {
       const res = await fetch("/api/gmail/process", { method: "POST" });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to sync mailbox");
+        throw new Error(
+          data.error ||
+            (res.status >= 502
+              ? "Sync took too long. Please press Sync again; it continues where it stopped."
+              : "Failed to sync mailbox")
+        );
       }
 
       const saved = data.syncResult?.saved ?? 0;
+      const remaining = data.syncResult?.remaining ?? 0;
       const txns = data.bankResult?.parsedCount ?? 0;
-      setMessage(
+      const summary =
         saved === 0 && txns === 0
           ? "Up to date"
-          : `${saved} new email${saved === 1 ? "" : "s"}, ${txns} new transaction${txns === 1 ? "" : "s"}`
-      );
+          : `${saved} new email${saved === 1 ? "" : "s"}, ${txns} new transaction${txns === 1 ? "" : "s"}`;
+      setMessage(remaining > 0 ? `${summary}. More waiting, sync again.` : summary);
       router.refresh();
     } catch (err) {
       setIsError(true);

@@ -69,52 +69,51 @@ function buildProductName(order: any): string | null {
 }
 
 export async function processTransactionMatches(userId: string) {
-  const { data: transactions, error: transactionsError } = await supabaseAdmin
-    .from("transactions")
-    .select("*")
-    .eq("user_id", userId)
-    .order("txn_date", { ascending: false })
-    .limit(200);
+  const [txnRes, ordersRes, matchesRes] = await Promise.all([
+    supabaseAdmin
+      .from("transactions")
+      .select("*")
+      .eq("user_id", userId)
+      .order("txn_date", { ascending: false })
+      .limit(200),
+    supabaseAdmin
+      .from("platform_orders")
+      .select(`
+        *,
+        supported_platform_types (
+          code
+        )
+      `)
+      .eq("user_id", userId)
+      .limit(200),
+    supabaseAdmin
+      .from("transaction_order_matches")
+      .select("id, transaction_id, platform_order_id, matched_product_name")
+      .eq("user_id", userId),
+  ]);
 
-  if (transactionsError) {
-    throw new Error(transactionsError.message);
-  }
+  if (txnRes.error) throw new Error(txnRes.error.message);
+  if (ordersRes.error) throw new Error(ordersRes.error.message);
+  if (matchesRes.error) throw new Error(matchesRes.error.message);
 
-  const { data: platformOrders, error: ordersError } = await supabaseAdmin
-    .from("platform_orders")
-    .select(`
-      *,
-      supported_platform_types (
-        code
-      )
-    `)
-    .eq("user_id", userId)
-    .limit(200);
-
-  if (ordersError) {
-    throw new Error(ordersError.message);
-  }
+  const platformOrders = ordersRes.data || [];
+  const existingMatches = new Map(
+    (matchesRes.data || []).map((m) => [`${m.transaction_id}:${m.platform_order_id}`, m])
+  );
 
   let matchedCount = 0;
   let skippedCount = 0;
+  const writes: Array<() => Promise<boolean>> = [];
 
-  for (const txn of transactions || []) {
+  for (const txn of txnRes.data || []) {
     const txnPlatformCode = getPlatformCodeFromTransaction(txn);
 
     if (!txnPlatformCode) {
-      console.log("MATCH DEBUG - no platform code", {
-        txnId: txn.id,
-        txnAmount: txn.amount,
-        txnMerchantRaw: txn.merchant_raw,
-        txnMerchantNormalized: txn.merchant_normalized,
-        txnProductName: txn.product_name,
-      });
-
       skippedCount++;
       continue;
     }
 
-    const candidates = (platformOrders || []).filter((order: any) => {
+    const candidates = platformOrders.filter((order: any) => {
       const orderPlatformCode = order.supported_platform_types?.code;
 
       if (!orderPlatformCode) return false;
@@ -125,93 +124,78 @@ export async function processTransactionMatches(userId: string) {
     });
 
     if (candidates.length === 0) {
-      console.log("MATCH DEBUG - no candidates", {
-        txnId: txn.id,
-        txnAmount: txn.amount,
-        txnMerchant: txn.merchant_normalized || txn.merchant_raw,
-        txnPlatformCode,
-      });
-
       skippedCount++;
       continue;
     }
 
-    const rankedCandidates = [...candidates].sort((a: any, b: any) => {
+    const best = [...candidates].sort((a: any, b: any) => {
       const aDistance = timeDistanceInHours(txn.txn_date, a.order_date);
       const bDistance = timeDistanceInHours(txn.txn_date, b.order_date);
-
       return aDistance - bDistance;
-    });
-
-    const best = rankedCandidates[0];
+    })[0];
     const productName = buildProductName(best);
+    const existingMatch = existingMatches.get(`${txn.id}:${best.id}`);
 
-    console.log("MATCH DEBUG - chosen candidate", {
-      txnId: txn.id,
-      txnAmount: txn.amount,
-      txnMerchant: txn.merchant_normalized || txn.merchant_raw,
-      txnPlatformCode,
-      matchedOrderId: best.id,
-      matchedOrderPlatform: best.supported_platform_types?.code,
-      matchedOrderAmount: best.order_amount,
-      matchedOrderTitle: best.order_title,
-    });
+    const txnUpToDate =
+      txn.product_name === productName &&
+      txn.platform_code === txnPlatformCode &&
+      !!txn.review_status;
+    const matchUpToDate =
+      !!existingMatch && existingMatch.matched_product_name === productName;
 
-    const { data: existingMatch } = await supabaseAdmin
-      .from("transaction_order_matches")
-      .select("id")
-      .eq("transaction_id", txn.id)
-      .eq("platform_order_id", best.id)
-      .eq("user_id", userId)
-      .maybeSingle();
+    if (txnUpToDate && matchUpToDate) {
+      matchedCount++;
+      continue;
+    }
 
-    if (!existingMatch) {
-      await supabaseAdmin.from("transaction_order_matches").insert({
-        user_id: userId,
-        transaction_id: txn.id,
-        platform_order_id: best.id,
-        matched_product_name: productName,
-        match_type: "amount_and_platform",
-        confidence_score: 90,
-        is_confirmed: false,
-      });
-    } else {
-      await supabaseAdmin
-        .from("transaction_order_matches")
-        .update({
+    writes.push(async () => {
+      if (!existingMatch) {
+        await supabaseAdmin.from("transaction_order_matches").insert({
+          user_id: userId,
+          transaction_id: txn.id,
+          platform_order_id: best.id,
           matched_product_name: productName,
           match_type: "amount_and_platform",
           confidence_score: 90,
-        })
-        .eq("id", existingMatch.id)
+          is_confirmed: false,
+        });
+      } else if (!matchUpToDate) {
+        await supabaseAdmin
+          .from("transaction_order_matches")
+          .update({
+            matched_product_name: productName,
+            match_type: "amount_and_platform",
+            confidence_score: 90,
+          })
+          .eq("id", existingMatch.id)
+          .eq("user_id", userId);
+      }
+
+      if (txnUpToDate) return true;
+
+      const updates: Record<string, unknown> = {
+        product_name: productName,
+        platform_code: txnPlatformCode,
+      };
+      if (!txn.review_status) {
+        updates.review_status = "needs_review";
+      }
+
+      const { error } = await supabaseAdmin
+        .from("transactions")
+        .update(updates)
+        .eq("id", txn.id)
         .eq("user_id", userId);
-    }
 
-    const updates: Record<string, unknown> = {
-      product_name: productName,
-      platform_code: txnPlatformCode,
-    };
+      return !error;
+    });
+  }
 
-    if (
-      txn.review_status === null ||
-      txn.review_status === undefined ||
-      txn.review_status === ""
-    ) {
-      updates.review_status = "needs_review";
-    }
-
-    const { error: updateTxnError } = await supabaseAdmin
-      .from("transactions")
-      .update(updates)
-      .eq("id", txn.id)
-      .eq("user_id", userId);
-
-    if (updateTxnError) {
-      skippedCount++;
-      continue;
-    }
-
-    matchedCount++;
+  // Only changed matches reach the database, and they're written in parallel.
+  const results = await Promise.all(writes.map((w) => w()));
+  for (const ok of results) {
+    if (ok) matchedCount++;
+    else skippedCount++;
   }
 
   return {

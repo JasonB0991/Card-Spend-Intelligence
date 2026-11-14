@@ -6,8 +6,10 @@ import { processTransactionMatches } from "@/lib/gmail/process-matches";
 /** Full pipeline for one user: fetch mail → parse transactions/orders → match. */
 export async function processMailboxForUser(userId: string) {
   const syncResult = await syncEmailsFromGmail(userId);
-  const bankResult = await processBankTransactions(userId);
-  const platformResult = await processPlatformOrders(userId);
+  const [bankResult, platformResult] = await Promise.all([
+    processBankTransactions(userId),
+    processPlatformOrders(userId),
+  ]);
   const matchResult = await processTransactionMatches(userId);
 
   return { syncResult, bankResult, platformResult, matchResult };
