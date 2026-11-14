@@ -108,7 +108,9 @@ const GMAIL_QUERY = `from:(${SUPPORTED_SENDERS.join(" OR ")}) newer_than:180d`;
 
 export class GmailReauthRequiredError extends Error {
   constructor() {
-    super("Gmail access has expired. Please sign out and sign in again.");
+    super(
+      "Gmail access is missing or expired. Please sign out and sign in again, and allow Gmail access."
+    );
     this.name = "GmailReauthRequiredError";
   }
 }
@@ -153,7 +155,11 @@ export async function syncEmailsFromGmail(userId: string) {
     messages = listResponse.data.messages || [];
   } catch (err) {
     const message = String((err as { message?: string })?.message || err);
-    if (message.includes("invalid_grant") || message.includes("No refresh token")) {
+    if (
+      message.includes("invalid_grant") ||
+      message.includes("No refresh token") ||
+      message.includes("insufficient authentication scopes")
+    ) {
       throw new GmailReauthRequiredError();
     }
     throw err;
